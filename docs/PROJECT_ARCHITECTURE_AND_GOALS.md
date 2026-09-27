@@ -271,9 +271,146 @@ Normalized Asset
           Dashboard
 ```
 
+## 7. Scanner Execution & Worker Architecture
+
+NETRA treats scanner binaries as execution engines, not as part of the canonical data model.
+
+The production deployment will package scanner tooling inside a dedicated **Worker Docker image** rather than installing scanner binaries directly on the NETRA host.
+
+### 7.1 Production topology
+
+```text
+                         NETRA Docker Compose
+                                  |
+        +-------------------------+-------------------------+
+        |                         |                         |
+        v                         v                         v
+   +---------+              +-----------+              +---------+
+   |Frontend | -----------> |  Backend  |              | Redis   |
+   +---------+              +-----+-----+              +----+----+
+                                  |                         |
+                                  +------------+------------+
+                                               |
+                                               v
+                                        +-------------+
+                                        |    Worker   |
+                                        | Docker Image|
+                                        +------+------+
+                                               |
+                 +-----------------------------+-----------------------------+
+                 |              |              |              |              |
+                 v              v              v              v              v
+               Amass         Subfinder        dnsx          httpx          Naabu
+                                                                              |
+                                                                         +----+
+                                                                         |
+                                                                       Katana
+                                                                         |
+                                                                       Nuclei
+                                               |
+                                               v
+                                        Scanner Adapters
+                                               |
+                                               v
+                                     Canonical Observation
+                                               |
+                                               v
+                                    Correlation / Deduplication
+                                               |
+                                               v
+                                       Change Detection
+                                               |
+                                               v
+                                          PostgreSQL
+```
+
+The exact process/queue framework remains an implementation detail. The architectural requirement is that scanner execution is isolated in the Worker layer.
+
+### 7.2 Scanner binaries inside the Worker
+
+The Worker image will contain pinned scanner versions.
+
+```text
+Worker Image
+├── Amass
+├── Subfinder
+├── dnsx
+├── Naabu
+├── httpx
+├── Katana
+└── Nuclei
+```
+
+Scanner versions will be pinned so that development, testing, and deployment use reproducible scanner environments.
+
+### 7.3 Development/research environment
+
+During scanner research, individual binaries may temporarily be installed directly on the Ubuntu VM. This is a research/development environment, not the intended final deployment model.
+
+The purpose is to execute the real scanner binaries, inspect their actual JSON/JSONL output, capture sanitized fixtures, define scanner-specific adapter contracts, and test normalization against real output.
+
+Once scanner contracts are established, the same pinned versions will be packaged into the Worker Docker image.
+
+### 7.4 Scanner adapter boundary
+
+The boundary is:
+
+```text
+Real Scanner
+     |
+     v
+Raw JSON / JSONL
+     |
+     v
+Scanner-specific Adapter
+     |
+     v
+Canonical NETRA Observation
+     |
+     v
+Correlation / Deduplication
+     |
+     v
+Change Detection
+     |
+     +--------------------+
+     |                    |
+     v                    v
+Current State       Change Events
+     |                    |
+     +---------+----------+
+               v
+           PostgreSQL
+```
+
+Each scanner gets its own adapter because output schemas, optional fields, semantics, and versions differ.
+
+The normalization contract must be based on real output from the pinned scanner version, not assumed fields or hand-written examples.
+
+### 7.5 Version and fixture policy
+
+For every scanner adapter, NETRA should retain a sanitized fixture representing actual scanner output.
+
+```text
+scanners/
+├── amass/
+│   └── fixtures/
+│       └── enumeration.jsonl
+├── dnsx/
+│   └── fixtures/
+│       └── resolution.jsonl
+└── httpx/
+    └── fixtures/
+        └── probe.jsonl
+```
+
+Each fixture should be associated with scanner name, scanner version, command/flags used, output format, relevant target type, and known optional fields.
+
+Sensitive or company-specific scan results must not be committed to the public repository.
+
 ---
 
-## 7. Discovery Layer
+## 8. Discovery Layer
 
 ### OWASP Amass
 
