@@ -41,6 +41,27 @@ services:
     networks:
       - netra
 
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    container_name: netra-backend
+
+    restart: unless-stopped
+
+    ports:
+      - "${BACKEND_PORT}:8000"
+
+    networks:
+      - netra
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   redis_data:
