@@ -18,7 +18,8 @@ Migrations are stored under:
     database/
     └── migrations/
         ├── 001_initial_schema.sql
-        └── 002_web_enrichment_and_change_tracking.sql
+        ├── 002_web_enrichment_and_change_tracking.sql
+        └── 003_canonical_service_per_port.sql
 
 Migration files are immutable once applied to a shared environment and are executed in order.
 
@@ -63,6 +64,21 @@ The intended relationship is:
            └── Observed on Port
 
 The migration intentionally does not add vulnerability/finding tables.
+
+Migration 002 has been applied to the NETRA PostgreSQL development database.
+
+## Migration 003 — Canonical Service Per Port
+
+Migration 003 adds a unique index on `services.port_id`.
+
+This establishes the current-state rule:
+
+    One Port
+       └── One Canonical Service
+
+Scanner-specific or historical observations should not be represented by creating duplicate current service rows. Scanner normalization and future provenance/history handling belong in the ingestion and change-detection layers.
+
+Migration 003 has been created and is ready to apply to the development database.
 
 ## Data Types
 
@@ -119,6 +135,7 @@ Initial uniqueness rules include:
 - IP address
 - DNS record → IP relationship
 - IP → port/protocol relationship
+- one current service per port
 - Web State → subdomain + port + scheme
 - Technology → name + category
 - Technology Detection → subdomain + technology
@@ -171,6 +188,33 @@ Supported initial statuses:
 
 The scan-to-observation relationship will be expanded as scanner ingestion is implemented. Migration 002 already allows change events to reference the scan that detected them.
 
+## Seed Data
+
+Development-only representative data is stored under:
+
+    database/
+    └── seeds/
+        └── 001_demo_asset.sql
+
+The seed creates only the `NETRA Demo` project and is safe to rerun because that project is removed and recreated inside a transaction.
+
+The seed uses the documentation-only TEST-NET address `203.0.113.10`.
+
+The representative model is:
+
+    test.example.com
+      ├── DNS A → 203.0.113.10
+      ├── 80/tcp   → HTTP  → web 200
+      ├── 443/tcp  → HTTPS → web 200
+      ├── 8080/tcp → HTTP  → web 403
+      └── 8888/tcp → HTTP  → web 200
+
+    Technologies:
+      ├── nginx → observed on 80, 443
+      └── PHP   → observed on 80, 8888
+
+Scanner-derived enrichment fields such as service product/version and technology version may be NULL when the scanner cannot determine them. NETRA does not use fake sentinel values such as `000` for unknown versions.
+
 ## Applying Migrations
 
 From the NETRA repository on the VM:
@@ -181,11 +225,13 @@ From the NETRA repository on the VM:
 
 Migration 001 has already been applied in the development environment.
 
-Migration 002 should be applied only after the migration file is pulled from GitHub and the repository state has been verified:
+Migration 002 has already been applied in the development environment.
+
+Migration 003 should be applied after pulling the current repository state:
 
     docker compose exec -T postgres \
       psql -U netra -d netra \
-      < database/migrations/002_web_enrichment_and_change_tracking.sql
+      < database/migrations/003_canonical_service_per_port.sql
 
 Do not edit or re-run an already-applied migration as a substitute for a new migration.
 
@@ -193,12 +239,21 @@ Do not commit real database credentials.
 
 ## Verification
 
-After Migration 002, verify the new tables:
+After the migrations, verify the tables:
 
-    dt
+    \dt
 
-Expected additional tables:
+Expected tables include:
 
+    projects
+    domains
+    subdomains
+    dns_records
+    dns_ip_resolutions
+    ip_addresses
+    ports
+    services
+    scans
     technologies
     web_states
     technology_detections
@@ -207,10 +262,11 @@ Expected additional tables:
 
 Useful structure checks:
 
-    d web_states
-    d technology_detections
-    d technology_detection_ports
-    d asset_change_events
+    \d services
+    \d web_states
+    \d technology_detections
+    \d technology_detection_ports
+    \d asset_change_events
 
 ## Retention
 
@@ -252,8 +308,11 @@ Phase 2 database implementation:
 - [x] Migration 001 applied to development PostgreSQL
 - [x] Canonical web/technology model documented
 - [x] Migration 002 created
-- [ ] Pull Migration 002 to VM
-- [ ] Apply Migration 002 to development PostgreSQL
+- [x] Migration 002 applied to development PostgreSQL
+- [x] Canonical service-per-port rule documented
+- [x] Migration 003 created
+- [ ] Pull Migration 003 to VM
+- [ ] Apply Migration 003 to development PostgreSQL
 - [ ] Insert representative dummy data
 - [ ] Validate end-to-end relationships
 - [ ] Implement Change Detection Engine
