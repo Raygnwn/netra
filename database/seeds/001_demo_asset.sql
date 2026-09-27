@@ -28,8 +28,8 @@ subdomain AS (
     RETURNING id, domain_id
 ),
 ip AS (
-    INSERT INTO ip_addresses (address)
-    VALUES ('203.0.113.10')
+    INSERT INTO ip_addresses (address, version)
+    VALUES ('203.0.113.10', 4)
     RETURNING id
 ),
 dns AS (
@@ -137,22 +137,22 @@ INSERT INTO technology_detection_ports (
     version,
     confidence
 )
-SELECT d.id, p.id, '1.24.0', 0.95
+SELECT d.id, p.id, '1.24.0', 95.00
 FROM nginx_detection d CROSS JOIN p80 p
 
 UNION ALL
 
-SELECT d.id, p.id, '1.24.0', 0.95
+SELECT d.id, p.id, '1.24.0', 95.00
 FROM nginx_detection d CROSS JOIN p443 p
 
 UNION ALL
 
-SELECT d.id, p.id, '8.3.0', 0.90
+SELECT d.id, p.id, '8.3.0', 90.00
 FROM php_detection d CROSS JOIN p80 p
 
 UNION ALL
 
-SELECT d.id, p.id, '8.3.0', 0.90
+SELECT d.id, p.id, '8.3.0', 90.00
 FROM php_detection d CROSS JOIN p8888 p;
 
 COMMIT;
